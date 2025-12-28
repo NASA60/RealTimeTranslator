@@ -299,10 +299,10 @@ class AudioSelectorGUI:
         self.device_id = None
         self.root = tk.Tk()
         self.root.title("Select Audio Source")
-        self.root.geometry("500x450")
+        self.root.geometry("600x500")
         self.root.eval('tk::PlaceWindow . center')
         
-        tk.Label(self.root, text="Select Audio Source (Cable Output / Stereo Mix):", font=("Segoe UI", 10, "bold")).pack(pady=10)
+        tk.Label(self.root, text="Select Audio Source (Recommended: Stereo Mix / Cable Output):", font=("Segoe UI", 10, "bold")).pack(pady=10)
         
         frame = tk.Frame(self.root)
         frame.pack(fill='both', expand=True, padx=10)
@@ -310,14 +310,62 @@ class AudioSelectorGUI:
         scrollbar = tk.Scrollbar(frame)
         scrollbar.pack(side='right', fill='y')
         
-        self.listbox = tk.Listbox(frame, yscrollcommand=scrollbar.set, font=("Consolas", 9))
+        self.listbox = tk.Listbox(frame, yscrollcommand=scrollbar.set, font=("Consolas", 10))
         self.listbox.pack(side='left', fill='both', expand=True)
         scrollbar.config(command=self.listbox.yview)
 
         self.devices = sd.query_devices()
+        self.hostapis = sd.query_hostapis()
+        
+        self.device_map = {} # Maps listbox index -> real device id
+        
+        recommended = []
+        others = []
+        
+        # Keywords for finding virtual/loopback devices
+        reco_keywords = ["stereo mix", "cable output", "virtual audio cable", "mix", "what u hear", "wave out"]
+
         for i, dev in enumerate(self.devices):
             if dev['max_input_channels'] > 0:
-                self.listbox.insert(tk.END, f"[{i}] {dev['name']}")
+                # Get API Name (MME, WASAPI, WDM-KS, etc.)
+                api_index = dev['hostapi']
+                api_name = self.hostapis[api_index]['name'] if api_index < len(self.hostapis) else "Unknown"
+                
+                dev_name = dev['name']
+                display_text = f"[{i}] {dev_name} ({api_name})"
+                
+                # Check if recommended
+                is_reco = any(k in dev_name.lower() for k in reco_keywords)
+                
+                if is_reco:
+                    recommended.append((i, display_text))
+                else:
+                    others.append((i, display_text))
+
+        # --- POPULATE LISTBOX ---
+        list_idx = 0
+        
+        if recommended:
+            self.listbox.insert(tk.END, "--- Recommended / Virtual Drivers ---")
+            self.listbox.itemconfigure(list_idx, fg="green", selectbackground="white", selectforeground="green")
+            list_idx += 1
+            
+            for real_id, text in recommended:
+                self.listbox.insert(tk.END, text)
+                self.listbox.itemconfigure(list_idx, bg="#e6fffa")
+                self.device_map[list_idx] = real_id
+                list_idx += 1
+            
+            self.listbox.insert(tk.END, "")
+            list_idx += 1
+            self.listbox.insert(tk.END, "--- Other Devices ---")
+            self.listbox.itemconfigure(list_idx, fg="gray")
+            list_idx += 1
+
+        for real_id, text in others:
+            self.listbox.insert(tk.END, text)
+            self.device_map[list_idx] = real_id
+            list_idx += 1
 
         # BUTTONS FRAME
         btn_frame = tk.Frame(self.root)
@@ -331,9 +379,13 @@ class AudioSelectorGUI:
     def confirm(self):
         selection = self.listbox.curselection()
         if selection:
-            text = self.listbox.get(selection[0])
-            self.device_id = int(text.split(']')[0].replace('[', ''))
-            self.root.destroy()
+            idx = selection[0]
+            if idx in self.device_map:
+                self.device_id = self.device_map[idx]
+                self.root.destroy()
+            else:
+                # User clicked on a header or separator
+                messagebox.showinfo("Select Device", "Please select a valid device from the list (lines with [ID]).")
         else:
             messagebox.showwarning("Warning", "Select a device.")
 

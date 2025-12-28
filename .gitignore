@@ -1,0 +1,23 @@
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller build files
+build/
+dist/
+*.spec
+
+# Large AI models
+models/
+model/
+bundled_model/
+temp_model.zip
+model_temp.zip
+
+# Environment & Temp files
+.venv/
+env/
+venv/
+*.log
+temp_extract/
